@@ -3,13 +3,20 @@
 import { useReadContract } from 'wagmi';
 import { tenderABI } from '../abi';
 import { formatEther } from 'viem';
-import CommitBid from './CommitBid'; // The component from the previous step
-import RevealBid from './RevealBid'; // The component from the previous step
+import CommitBid from './CommitBid'; 
+import RevealBid from './RevealBid'; 
+import WithdrawEMD from './WithdrawEMD';
 
 const CONTRACT_ADDRESS = '0x0FeD7C2d66ceF37BA2a3a53f3de627eF4752F51d';
 
+const getIPFSGatewayURL = (uri: string) => {
+  if (uri && uri.startsWith('ipfs://')) {
+    return uri.replace('ipfs://', 'https://gateway.pinata.cloud/ipfs/');
+  }
+  return uri;
+};
+
 export default function TenderDashboard({ tenderId }: { tenderId: bigint }) {
-  // 1. Fetch Tender Data from Sepolia
   const { data: tender, isLoading, error } = useReadContract({
     address: CONTRACT_ADDRESS,
     abi: tenderABI,
@@ -17,73 +24,66 @@ export default function TenderDashboard({ tenderId }: { tenderId: bigint }) {
     args: [tenderId],
   });
 
-  if (isLoading) return <div className="p-4 text-white">Loading Tender #{tenderId.toString()}...</div>;
-  
-  // NEW: This will print the exact blockchain error on your screen!
-  if (error) return <div className="p-4 text-red-500 font-bold border border-red-500 bg-red-900 rounded">Error fetching data: {error.message}</div>;
-  
-  if (!tender) return <div className="p-4 text-red-500">Tender not found.</div>;
+  if (isLoading) return <div className="p-4 text-[#CBC5EA]">Loading Tender #{tenderId.toString()}...</div>;
+  if (error) return <div className="p-4 text-red-400 font-bold border border-red-500 bg-red-900/30 rounded">Error fetching data: {error.message}</div>;
+  if (!tender) return <div className="p-4 text-red-400">Tender not found.</div>;
 
-  // Wagmi returns data as an array. Let's check if the ID is 0 (which means empty/doesn't exist)
   const [id, metadataURI, emdAmount, biddingEnd, revealEnd, isOpen, lowestBidder, lowestBidAmount] = tender as any;
-  
-  if (id === BigInt(0)) return <div className="p-4 text-red-500">Tender ID {tenderId.toString()} exists, but it is empty on the blockchain.</div>;
+  if (id === BigInt(0)) return <div className="p-4 text-red-400">Tender ID {tenderId.toString()} exists, but it is empty.</div>;
 
-  // 2. Time Logic (Determine the current phase)
-  const currentTime = Math.floor(Date.now() / 1000); // Current time in seconds
+  const currentTime = Math.floor(Date.now() / 1000); 
   const isBiddingPhase = currentTime <= Number(biddingEnd);
   const isRevealPhase = currentTime > Number(biddingEnd) && currentTime <= Number(revealEnd);
   const isAwardPhase = currentTime > Number(revealEnd);
 
   return (
-    <div className="max-w-3xl mx-auto p-6 bg-gray-800 rounded-xl shadow-lg text-white my-8">
-      <div className="flex justify-between items-center border-b border-gray-700 pb-4 mb-4">
-        <h2 className="text-2xl font-bold">Tender #{id.toString()}</h2>
+    // MAIN CARD: Slate Navy
+    <div className="w-full flex flex-col p-6 bg-[#313D5A] border border-[#73628A] rounded-2xl shadow-xl text-[#EAEAEA] hover:border-[#CBC5EA] transition-all duration-300">
+      <div className="flex justify-between items-center border-b border-[#73628A] pb-5 mb-5">
+        <h2 className="text-2xl font-bold tracking-wide">Tender #{id.toString()}</h2>
         
-        {/* Dynamic Status Badge */}
-        <span className={`px-3 py-1 rounded-full text-sm font-bold ${
-          !isOpen ? 'bg-red-600' : 
-          isBiddingPhase ? 'bg-green-600' : 
-          isRevealPhase ? 'bg-yellow-600 text-black' : 'bg-blue-600'
+        {/* Semantic Status Badges (Kept generic for UX recognition) */}
+        <span className={`px-4 py-1.5 rounded-full text-xs uppercase tracking-wider font-bold shadow-sm ${
+          !isOpen ? 'bg-red-500/20 text-red-300 border border-red-500/50' : 
+          isBiddingPhase ? 'bg-green-500/20 text-green-300 border border-green-500/50' : 
+          isRevealPhase ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/50' : 'bg-blue-500/20 text-blue-300 border border-blue-500/50'
         }`}>
           {!isOpen ? 'Closed / Awarded' : isBiddingPhase ? 'Bidding Open' : isRevealPhase ? 'Reveal Phase' : 'Evaluating'}
         </span>
       </div>
 
       <div className="grid grid-cols-2 gap-4 mb-6">
-        <div className="bg-gray-700 p-4 rounded-lg">
-          <p className="text-gray-400 text-sm">EMD Required</p>
-          <p className="text-xl font-bold">{formatEther(emdAmount)} ETH</p>
+        {/* INNER BOXES: Deep Teal */}
+        <div className="bg-[#183642] border border-[#73628A] p-4 rounded-xl shadow-inner">
+          <p className="text-[#CBC5EA] text-xs font-bold uppercase tracking-wider mb-1">EMD Required</p>
+          <p className="text-xl font-bold text-[#EAEAEA]">{formatEther(emdAmount)} ETH</p>
         </div>
-        <div className="bg-gray-700 p-4 rounded-lg">
-          <p className="text-gray-400 text-sm">Document Link</p>
-          <a href={metadataURI} target="_blank" className="text-blue-400 hover:underline break-all">
+        <div className="bg-[#183642] border border-[#73628A] p-4 rounded-xl shadow-inner">
+          <p className="text-[#CBC5EA] text-xs font-bold uppercase tracking-wider mb-1">Document Link</p>
+          <a href={getIPFSGatewayURL(metadataURI)} target="_blank" rel="noopener noreferrer" className="text-[#CBC5EA] hover:text-[#EAEAEA] underline break-all transition-colors">
             View Notice Inviting Tender
           </a>
         </div>
       </div>
 
-      {/* Conditional Rendering: Only show what the user is legally allowed to do right now */}
-      <div className="mt-8">
-        {isOpen && isBiddingPhase && (
-          <CommitBid tenderId={id} emdAmount={emdAmount} />
-        )}
-
-        {isOpen && isRevealPhase && (
-          <RevealBid tenderId={id} />
-        )}
-
-        {isAwardPhase && (
-          <div className="p-4 bg-gray-900 border border-gray-600 rounded-lg text-center">
-            <h3 className="text-xl font-bold mb-2">Bidding & Reveal Phases Have Ended</h3>
-            <p className="text-gray-400">Waiting for Admin to officially award the contract.</p>
+      <div className="mt-auto pt-2">
+        {isOpen && isBiddingPhase && <CommitBid tenderId={id} emdAmount={emdAmount} />}
+        {isOpen && isRevealPhase && <RevealBid tenderId={id} />}
+        {isOpen && isAwardPhase && (
+          <div className="p-6 bg-[#183642] border border-[#73628A] rounded-xl text-center shadow-inner">
+            <h3 className="text-lg font-bold mb-2 text-[#EAEAEA]">Bidding & Reveal Phases Have Ended</h3>
+            <p className="text-[#CBC5EA] text-sm">Waiting for Admin to officially award the contract.</p>
             {lowestBidder !== '0x0000000000000000000000000000000000000000' && (
-              <p className="mt-2 text-green-400 font-bold">
-                Current Lowest Bidder: {lowestBidder.substring(0,6)}...{lowestBidder.substring(38)}
-              </p>
+              <div className="mt-4 pt-4 border-t border-[#73628A]">
+                <p className="text-xs text-[#CBC5EA] uppercase tracking-wider mb-1">Current Lowest Bidder</p>
+                <p className="text-[#EAEAEA] font-mono font-bold bg-[#313D5A] py-2 px-4 rounded inline-block">
+                  {lowestBidder.substring(0,6)}...{lowestBidder.substring(38)}
+                </p>
+              </div>
             )}
           </div>
         )}
+        {(!isOpen || isAwardPhase) && <WithdrawEMD tenderId={id} />}
       </div>
     </div>
   );
