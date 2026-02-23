@@ -1,58 +1,68 @@
-'use client';
+import { ShieldCheck, FileLock2, HardDrive, ArrowRight } from 'lucide-react';
 
-import { useReadContract } from 'wagmi';
-import { tenderABI } from '../abi';
-import TenderDashboard from '../components/TenderDashboard';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
-
-const CONTRACT_ADDRESS = '0x0FeD7C2d66ceF37BA2a3a53f3de627eF4752F51d';
-
-export default function Home() {
-  const { data: tenderCount, isLoading } = useReadContract({
-    address: CONTRACT_ADDRESS,
-    abi: tenderABI,
-    functionName: 'tenderCount',
-  });
-
-  if (isLoading) {
-    return (
-      <div className="flex flex-col items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#CBC5EA] mb-4"></div>
-        <p className="text-[#CBC5EA] font-medium">Syncing with Sepolia Blockchain...</p>
-      </div>
-    );
-  }
-
-  const count = tenderCount ? Number(tenderCount) : 0;
-  const tenderIds = Array.from({ length: count }, (_, i) => BigInt(count - i));
-
+export default function LandingPage() {
   return (
-    <div className="animate-fade-in">
-      {/* Hero Section */}
-      <div className="flex flex-col items-start justify-between md:flex-row md:items-center mb-12">
-        <div>
-          <h2 className="text-4xl font-extrabold mb-3 text-[#EAEAEA]">Active Tenders</h2>
-          <p className="text-[#CBC5EA] text-lg">Browse and bid on cryptographically secured government contracts.</p>
+    <div className="w-full animate-fade-in flex flex-col items-center justify-center pt-10 pb-20">
+      
+      {/* HERO SECTION */}
+      <div className="text-center max-w-4xl mb-20">
+        <div className="inline-block bg-[#313D5A] border border-[#73628A] text-[#CBC5EA] px-4 py-1.5 rounded-full text-sm font-bold tracking-wider mb-6 shadow-inner">
+          POWERED BY ETHEREUM & IPFS
         </div>
-        <div className="mt-6 md:mt-0 shadow-lg rounded-xl">
-          <ConnectButton />
+        <h1 className="text-5xl md:text-6xl font-extrabold text-[#EAEAEA] mb-6 leading-tight">
+          The Future of <span className="text-[#CBC5EA]">Government Procurement.</span>
+        </h1>
+        <p className="text-xl text-[#CBC5EA] mb-10 leading-relaxed">
+          SmartTender is a next-generation decentralized platform that eliminates corruption, ensures absolute transparency, and secures financial bids using cryptographic proofs.
+        </p>
+        
+        <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <a href="/dashboard" className="bg-[#73628A] hover:bg-[#CBC5EA] hover:text-[#183642] text-[#EAEAEA] font-bold py-4 px-8 rounded-lg transition-all flex items-center justify-center gap-2 text-lg shadow-lg">
+            View Active Tenders <ArrowRight size={20} />
+          </a>
+          <a href="/admin" className="bg-[#313D5A] border border-[#73628A] hover:bg-[#183642] text-[#EAEAEA] font-bold py-4 px-8 rounded-lg transition-all flex items-center justify-center text-lg">
+            Admin Portal
+          </a>
         </div>
       </div>
 
-      {/* The Grid Layout */}
-      {tenderIds.length === 0 ? (
-        <div className="bg-[#313D5A] border border-[#73628A] rounded-xl p-16 text-center shadow-xl">
-          <div className="text-5xl mb-4 text-[#CBC5EA]">📭</div>
-          <h3 className="text-xl font-bold text-[#EAEAEA] mb-2">No active tenders</h3>
-          <p className="text-[#CBC5EA]">Wait for an administrator to publish a new contract.</p>
+      {/* FEATURES GRID */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full">
+        
+        {/* Feature 1 */}
+        <div className="bg-[#313D5A] border border-[#73628A] p-8 rounded-xl shadow-xl hover:border-[#CBC5EA] transition-colors">
+          <div className="bg-[#183642] w-14 h-14 rounded-lg flex items-center justify-center mb-6 border border-[#73628A]">
+            <FileLock2 className="text-[#CBC5EA]" size={28} />
+          </div>
+          <h3 className="text-xl font-bold text-[#EAEAEA] mb-3">Two-Envelope System</h3>
+          <p className="text-[#CBC5EA] leading-relaxed">
+            Technical qualifications are evaluated off-chain first. Financial bids remain cryptographically locked and unreadable until the Reveal Phase.
+          </p>
         </div>
-      ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-          {tenderIds.map((id) => (
-            <TenderDashboard key={id.toString()} tenderId={id} />
-          ))}
+
+        {/* Feature 2 */}
+        <div className="bg-[#313D5A] border border-[#73628A] p-8 rounded-xl shadow-xl hover:border-[#CBC5EA] transition-colors">
+          <div className="bg-[#183642] w-14 h-14 rounded-lg flex items-center justify-center mb-6 border border-[#73628A]">
+            <HardDrive className="text-[#CBC5EA]" size={28} />
+          </div>
+          <h3 className="text-xl font-bold text-[#EAEAEA] mb-3">IPFS Decentralized Storage</h3>
+          <p className="text-[#CBC5EA] leading-relaxed">
+            All tender requirements and contractor architectural blueprints are permanently stored on Pinata's IPFS network, completely tamper-proof.
+          </p>
         </div>
-      )}
+
+        {/* Feature 3 */}
+        <div className="bg-[#313D5A] border border-[#73628A] p-8 rounded-xl shadow-xl hover:border-[#CBC5EA] transition-colors">
+          <div className="bg-[#183642] w-14 h-14 rounded-lg flex items-center justify-center mb-6 border border-[#73628A]">
+            <ShieldCheck className="text-[#CBC5EA]" size={28} />
+          </div>
+          <h3 className="text-xl font-bold text-[#EAEAEA] mb-3">Smart Contract Enforcement</h3>
+          <p className="text-[#CBC5EA] leading-relaxed">
+            Earnest Money Deposits (EMD) are locked in escrow. The blockchain mathematically guarantees the lowest approved bidder wins the contract.
+          </p>
+        </div>
+
+      </div>
     </div>
   );
 }

@@ -1,3 +1,5 @@
+'use client';
+
 import { useState, useEffect } from 'react';
 import { useWriteContract } from 'wagmi';
 import { parseEther } from 'viem';
@@ -9,10 +11,8 @@ export default function RevealBid({ tenderId }: { tenderId: bigint }) {
   const [bidAmount, setBidAmount] = useState('');
   const [secretSalt, setSecretSalt] = useState('');
   const [autoFilled, setAutoFilled] = useState(false);
-
   const { writeContract, isPending } = useWriteContract();
 
-  // --- AUTO-FILL LOGIC ---
   useEffect(() => {
     const savedData = localStorage.getItem(`tender_${tenderId.toString()}_receipt`);
     if (savedData) {
@@ -21,58 +21,24 @@ export default function RevealBid({ tenderId }: { tenderId: bigint }) {
         setBidAmount(parsed.bidAmount);
         setSecretSalt(parsed.secretSalt);
         setAutoFilled(true);
-      } catch (e) {
-        console.error("Failed to parse local backup");
-      }
+      } catch (e) {}
     }
   }, [tenderId]);
 
-  // --- EXECUTION ---
-  const handleReveal = async () => {
-    if (!bidAmount || !secretSalt) return alert("Missing reveal data");
-
-    const bidAmountWei = parseEther(bidAmount);
-
-    writeContract({
-      address: CONTRACT_ADDRESS,
-      abi: tenderABI,
-      functionName: 'revealBid',
-      args: [tenderId, bidAmountWei, secretSalt],
-    });
+  const handleReveal = () => {
+    if (!bidAmount || !secretSalt) return;
+    writeContract({ address: CONTRACT_ADDRESS, abi: tenderABI, functionName: 'revealBid', args: [tenderId, parseEther(bidAmount), secretSalt] });
   };
 
   return (
-    <div className="p-4 border rounded-lg bg-gray-900 text-white mt-6">
-      <h3 className="text-xl font-bold mb-4">Reveal Your Bid</h3>
+    <div className="mt-4 p-5 bg-[#183642] border border-[#73628A] rounded-lg">
+      <h3 className="text-md font-bold mb-3 text-[#EAEAEA]">Reveal Your Bid</h3>
+      {autoFilled && <div className="mb-3 p-2 bg-green-900/40 border border-green-500 rounded text-xs text-green-400">✅ Auto-filled from local storage</div>}
       
-      {autoFilled && (
-        <div className="mb-4 p-2 bg-green-900 border border-green-500 rounded text-sm">
-          ✅ Credentials securely auto-filled from your browser storage.
-        </div>
-      )}
-
       <div className="flex flex-col gap-3">
-        <label>Financial Bid Amount (ETH)</label>
-        <input 
-          type="number" 
-          value={bidAmount} 
-          onChange={(e) => setBidAmount(e.target.value)}
-          className="p-2 text-black rounded"
-        />
-
-        <label>Secret Salt</label>
-        <input 
-          type="text" 
-          value={secretSalt} 
-          onChange={(e) => setSecretSalt(e.target.value)}
-          className="p-2 text-black rounded"
-        />
-
-        <button 
-          onClick={handleReveal} 
-          disabled={isPending}
-          className="mt-4 p-3 bg-purple-600 rounded hover:bg-purple-700 font-bold"
-        >
+        <input type="number" value={bidAmount} onChange={(e) => setBidAmount(e.target.value)} className="w-full p-2 rounded bg-[#313D5A] border border-[#73628A] text-white focus:outline-none" placeholder="Bid Amount (ETH)" />
+        <input type="text" value={secretSalt} onChange={(e) => setSecretSalt(e.target.value)} className="w-full p-2 rounded bg-[#313D5A] border border-[#73628A] text-white focus:outline-none" placeholder="Secret Password" />
+        <button onClick={handleReveal} disabled={isPending} className="w-full bg-[#73628A] hover:bg-[#CBC5EA] hover:text-[#183642] text-[#EAEAEA] font-bold py-2.5 rounded transition-all">
           {isPending ? 'Revealing...' : 'Reveal Bid'}
         </button>
       </div>

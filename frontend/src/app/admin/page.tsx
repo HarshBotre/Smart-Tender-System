@@ -1,114 +1,125 @@
 'use client';
 
 import { useState } from 'react';
-import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { useWriteContract, useReadContract, useAccount } from 'wagmi';
 import { tenderABI } from '../../abi';
 import { parseEther } from 'viem';
+import { Search } from 'lucide-react';
 
+const ADMIN_WALLET = '0x54F99f09aC935AaFe19E4e9C8a9c65c7f28B93fA';
 const CONTRACT_ADDRESS = '0x0FeD7C2d66ceF37BA2a3a53f3de627eF4752F51d';
+const getIPFSGatewayURL = (uri: string) => uri?.startsWith('ipfs://') ? uri.replace('ipfs://', 'https://gateway.pinata.cloud/ipfs/') : uri;
 
 export default function AdminPage() {
+  // 1. ALL REACT HOOKS MUST GO FIRST
+  const { address } = useAccount();
+  
   const [file, setFile] = useState<File | null>(null);
   const [emd, setEmd] = useState('0.01');
-  const [bidDuration, setBidDuration] = useState('1440'); // Default to 24 hours (in minutes)
+  const [bidDuration, setBidDuration] = useState('1440');
   const [revealDuration, setRevealDuration] = useState('1440');
   
-  const [status, setStatus] = useState('');
+  const [evalTenderId, setEvalTenderId] = useState('');
+  const [bidderAddress, setBidderAddress] = useState('');
+  const [addressesToApprove, setAddressesToApprove] = useState('');
 
-  const { data: hash, writeContract, isPending } = useWriteContract();
-  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash });
+  const isValidAddress = bidderAddress.startsWith('0x') && bidderAddress.length === 42;
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) setFile(e.target.files[0]);
-  };
+  const { writeContract: writeCreate } = useWriteContract();
+  const { writeContract: writeEval } = useWriteContract();
+
+  const { data: bidData, isLoading: isReadingBid } = useReadContract({
+    address: CONTRACT_ADDRESS, 
+    abi: tenderABI, 
+    functionName: 'bids',
+    args: evalTenderId && isValidAddress ? [BigInt(evalTenderId), bidderAddress as `0x${string}`] : undefined,
+    query: { enabled: !!evalTenderId && isValidAddress }
+  });
+
+  // 2. SECURITY GUARD GOES HERE (After hooks, before UI)
+  if (!address || address.toLowerCase() !== ADMIN_WALLET.toLowerCase()) {
+    return (
+      <div className="w-full max-w-6xl mx-auto animate-fade-in flex flex-col items-center justify-center mt-20">
+        <div className="bg-[#313D5A] border border-red-500/50 p-12 text-center rounded-xl shadow-xl max-w-md">
+          <h2 className="text-2xl font-bold text-red-400 mb-4">Access Denied</h2>
+          <p className="text-[#CBC5EA] mb-6">You must connect the official Administrator wallet to view this portal.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 3. RENDER THE ACTUAL ADMIN UI
+  const technicalURI = bidData ? (bidData as any)[0] : '';
+  const isTechnicallyValid = bidData ? (bidData as any)[2] : false;
 
   const handleCreateTender = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file) return alert("Please select a PDF document first!");
+    if (!file) return;
+    const formData = new FormData(); formData.append('file', file);
+    const pinataRes = await fetch('https://api.pinata.cloud/pinning/pinFileToIPFS', { method: 'POST', headers: { Authorization: `Bearer ${process.env.NEXT_PUBLIC_PINATA_JWT}` }, body: formData });
+    const pinataData = await pinataRes.json();
+    writeCreate({ address: CONTRACT_ADDRESS, abi: tenderABI, functionName: 'createTender', args: [`ipfs://${pinataData.IpfsHash}`, parseEther(emd), BigInt(Number(bidDuration) * 60), BigInt(Number(revealDuration) * 60)] });
+  };
 
-    try {
-      setStatus('Uploading document to IPFS via Pinata...');
-
-      // 1. Upload the physical file to Pinata (IPFS)
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const pinataRes = await fetch('https://api.pinata.cloud/pinning/pinFileToIPFS', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${process.env.NEXT_PUBLIC_PINATA_JWT}`,
-        },
-        body: formData
-      });
-
-      const pinataData = await pinataRes.json();
-      if (!pinataRes.ok) throw new Error(pinataData.error?.details || 'Pinata upload failed');
-
-      const ipfsUri = `ipfs://${pinataData.IpfsHash}`;
-      setStatus(`File securely uploaded! IPFS Hash: ${pinataData.IpfsHash}. Waiting for MetaMask...`);
-
-      // 2. Send the IPFS link and Tender details to the Blockchain
-      writeContract({
-        address: CONTRACT_ADDRESS,
-        abi: tenderABI,
-        functionName: 'createTender',
-        args: [
-          ipfsUri,
-          parseEther(emd), // viem's parseEther automatically converts "0.01" to Wei!
-          BigInt(Number(bidDuration) * 60), // Convert minutes to seconds
-          BigInt(Number(revealDuration) * 60)
-        ],
-      });
-
-    } catch (error: any) {
-      console.error(error);
-      setStatus(`Error: ${error.message}`);
-    }
+  const handleApprove = (e: React.FormEvent) => {
+    e.preventDefault();
+    const addressArray = addressesToApprove.split(',').map(a => a.trim()).filter(a => a.startsWith('0x') && a.length === 42);
+    if (addressArray.length > 0) writeEval({ address: CONTRACT_ADDRESS, abi: tenderABI, functionName: 'evaluateTechnical', args: [BigInt(evalTenderId), addressArray as `0x${string}`[]] });
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-8 bg-gray-900 border border-gray-700 rounded-xl my-10 text-white shadow-2xl">
-      <h2 className="text-3xl font-extrabold mb-6 text-blue-400">Admin Control Panel</h2>
-      <p className="text-gray-400 mb-8">Upload official Notice Inviting Tender (NIT) documents to IPFS and initialize a new smart contract bidding cycle.</p>
+    <div className="w-full max-w-6xl mx-auto animate-fade-in">
+      <div className="mb-10 border-b border-[#73628A] pb-6">
+        <h1 className="text-4xl font-extrabold mb-2 text-[#EAEAEA]">Administration Control</h1>
+        <p className="text-[#CBC5EA] text-lg">Manage procurements and evaluate vendor submissions securely.</p>
+      </div>
 
-      <form onSubmit={handleCreateTender} className="flex flex-col gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         
-        {/* File Upload */}
-        <div className="p-4 border-2 border-dashed border-gray-600 rounded-lg text-center hover:border-blue-500 transition-colors">
-          <label className="block text-sm font-bold text-gray-300 mb-2">1. Upload Tender PDF</label>
-          <input type="file" accept="application/pdf" onChange={handleFileChange} className="w-full text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer" />
+        {/* CARD 1: CREATE TENDER */}
+        <div className="bg-[#313D5A] rounded-xl p-8 shadow-xl border border-[#73628A]">
+          <h2 className="text-xl font-bold text-[#EAEAEA] mb-6 border-b border-[#73628A] pb-3">1. Initialize New Tender</h2>
+          <form onSubmit={handleCreateTender} className="flex flex-col gap-4">
+            <div className="bg-[#183642] p-4 rounded border border-[#73628A]">
+              <label className="block text-sm font-medium text-[#CBC5EA] mb-2">Official Notice (PDF)</label>
+              <input type="file" accept="application/pdf" onChange={(e) => setFile(e.target.files?.[0] || null)} className="w-full text-[#EAEAEA] text-sm file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-[#73628A] file:text-white cursor-pointer" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-[#CBC5EA] mb-1">EMD Amount (ETH)</label>
+              <input type="number" step="0.001" value={emd} onChange={(e) => setEmd(e.target.value)} className="w-full p-3 rounded bg-[#183642] border border-[#73628A] text-white focus:outline-none focus:border-[#CBC5EA]" required />
+            </div>
+            <button type="submit" className="mt-4 w-full bg-[#73628A] hover:bg-[#CBC5EA] hover:text-[#183642] text-[#EAEAEA] font-bold py-3 rounded transition-colors">Upload & Create Tender</button>
+          </form>
         </div>
 
-        {/* EMD Input */}
-        <div>
-          <label className="block text-sm font-bold text-gray-300 mb-1">2. EMD Amount (ETH)</label>
-          <input type="number" step="0.001" value={emd} onChange={(e) => setEmd(e.target.value)} className="w-full p-3 rounded bg-gray-800 border border-gray-600 text-white" required />
-        </div>
-
-        {/* Timers */}
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-bold text-gray-300 mb-1">Bidding Duration (Minutes)</label>
-            <input type="number" value={bidDuration} onChange={(e) => setBidDuration(e.target.value)} className="w-full p-3 rounded bg-gray-800 border border-gray-600 text-white" required />
+        {/* CARD 2: EVALUATE */}
+        <div className="bg-[#313D5A] rounded-xl p-8 shadow-xl border border-[#73628A]">
+          <h2 className="text-xl font-bold text-[#EAEAEA] mb-6 border-b border-[#73628A] pb-3">2. Technical Evaluation</h2>
+          
+          <div className="bg-[#183642] p-5 rounded border border-[#73628A] mb-6">
+            <h3 className="text-sm font-bold text-[#EAEAEA] mb-3 flex items-center gap-2"><Search size={16}/> Lookup Submission</h3>
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              <input type="number" value={evalTenderId} onChange={(e) => setEvalTenderId(e.target.value)} className="col-span-1 p-2 rounded bg-[#313D5A] border border-[#73628A] text-white text-sm outline-none" placeholder="Tender ID" />
+              <input type="text" value={bidderAddress} onChange={(e) => setBidderAddress(e.target.value)} className="col-span-2 p-2 rounded bg-[#313D5A] border border-[#73628A] text-white text-sm outline-none" placeholder="Bidder Address (0x...)" />
+            </div>
+            {isReadingBid ? <p className="text-[#CBC5EA] text-sm">Querying...</p> : technicalURI ? (
+              <div className="flex justify-between items-center bg-[#313D5A] p-3 rounded border border-[#73628A]">
+                <div>
+                  <span className="text-sm text-[#EAEAEA] block">Document Found</span>
+                  {isTechnicallyValid && <span className="text-xs text-green-400 font-bold block mt-1">✓ Approved</span>}
+                </div>
+                <a href={getIPFSGatewayURL(technicalURI)} target="_blank" rel="noopener noreferrer" className="bg-[#73628A] hover:bg-[#CBC5EA] hover:text-[#183642] text-[#EAEAEA] text-xs px-4 py-2 rounded font-bold transition-all">View PDF</a>
+              </div>
+            ) : null}
           </div>
-          <div>
-            <label className="block text-sm font-bold text-gray-300 mb-1">Reveal Duration (Minutes)</label>
-            <input type="number" value={revealDuration} onChange={(e) => setRevealDuration(e.target.value)} className="w-full p-3 rounded bg-gray-800 border border-gray-600 text-white" required />
-          </div>
+
+          <form onSubmit={handleApprove} className="flex flex-col gap-4">
+            <textarea value={addressesToApprove} onChange={(e) => setAddressesToApprove(e.target.value)} className="w-full p-3 rounded bg-[#183642] border border-[#73628A] text-white text-sm outline-none focus:border-[#CBC5EA] h-24" placeholder="Paste approved wallet addresses here (comma-separated)..." required />
+            <button type="submit" className="w-full bg-[#73628A] hover:bg-[#CBC5EA] hover:text-[#183642] text-[#EAEAEA] font-bold py-3 rounded transition-colors">Approve Valid Bidders</button>
+          </form>
         </div>
 
-        {/* Submit Button */}
-        <button type="submit" disabled={isPending || isConfirming} className="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-lg text-lg disabled:bg-gray-600 transition-colors">
-          {isPending || isConfirming ? 'Processing...' : 'Upload to IPFS & Create Tender'}
-        </button>
-
-      </form>
-
-      {/* Status Messages */}
-      {status && <div className="mt-6 p-4 bg-gray-800 border border-blue-500 rounded text-blue-300 text-sm font-mono break-words">{status}</div>}
-      {isConfirming && <div className="mt-2 p-4 bg-yellow-900 border border-yellow-500 rounded text-yellow-200 text-sm">Waiting for blockchain confirmation...</div>}
-      {isConfirmed && <div className="mt-2 p-4 bg-green-900 border border-green-500 rounded text-green-200 text-sm font-bold">Success! Tender created on the blockchain!</div>}
-
+      </div>
     </div>
   );
 }
