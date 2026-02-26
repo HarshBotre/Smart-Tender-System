@@ -10,7 +10,8 @@ import WithdrawEMD from './WithdrawEMD';
 const CONTRACT_ADDRESS = '0x0FeD7C2d66ceF37BA2a3a53f3de627eF4752F51d';
 const getIPFSGatewayURL = (uri: string) => uri?.startsWith('ipfs://') ? uri.replace('ipfs://', 'https://gateway.pinata.cloud/ipfs/') : uri;
 
-export default function TenderDashboard({ tenderId }: { tenderId: bigint }) {
+// Added "filter" to the incoming props
+export default function TenderDashboard({ tenderId, filter = 'ALL' }: { tenderId: bigint, filter?: string }) {
   const { data: tender, isLoading } = useReadContract({ address: CONTRACT_ADDRESS, abi: tenderABI, functionName: 'tenders', args: [tenderId] });
 
   if (isLoading) return <div className="bg-[#313D5A] border border-[#73628A] rounded-xl p-8 text-[#CBC5EA] text-center shadow-lg">Loading...</div>;
@@ -19,10 +20,21 @@ export default function TenderDashboard({ tenderId }: { tenderId: bigint }) {
   const [id, metadataURI, emdAmount, biddingEnd, revealEnd, isOpen, lowestBidder] = tender as any;
   if (id === BigInt(0)) return null;
 
+  // Phase Calculations
   const currentTime = Math.floor(Date.now() / 1000); 
   const isBiddingPhase = currentTime <= Number(biddingEnd);
   const isRevealPhase = currentTime > Number(biddingEnd) && currentTime <= Number(revealEnd);
   const isAwardPhase = currentTime > Number(revealEnd);
+
+  // --- NEW: FILTER LOGIC ---
+  let currentPhaseCategory = 'CLOSED';
+  if (isOpen && isBiddingPhase) currentPhaseCategory = 'BIDDING';
+  else if (isOpen && isRevealPhase) currentPhaseCategory = 'REVEAL';
+
+  if (filter !== 'ALL' && filter !== currentPhaseCategory) {
+    return null; // Hide this card entirely if it doesn't match the selected filter
+  }
+  // -------------------------
 
   return (
     <div className="bg-[#313D5A] border border-[#73628A] rounded-xl p-6 shadow-xl flex flex-col h-full hover:border-[#CBC5EA] transition-colors">
@@ -60,7 +72,7 @@ export default function TenderDashboard({ tenderId }: { tenderId: bigint }) {
              {lowestBidder !== '0x0000000000000000000000000000000000000000' && (
                 <div className="mt-3 pt-3 border-t border-[#73628A]">
                   <p className="text-xs text-[#CBC5EA] uppercase tracking-wider mb-1">Current Lowest Bidder</p>
-                  <p className="text-green-400 font-mono text-sm">{lowestBidder}</p>
+                  <p className="text-green-400 font-mono text-sm break-all">{lowestBidder}</p>
                 </div>
              )}
            </div>
