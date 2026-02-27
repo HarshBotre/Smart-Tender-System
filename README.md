@@ -83,8 +83,3 @@ npm run dev
 
 Navigate to `http://localhost:3000` to view the application.
 
-```
-
-Would you like me to start drafting that presentation script for you next, or do you want to tackle linking your Hostinger landing page?
-
-```
