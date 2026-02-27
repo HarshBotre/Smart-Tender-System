@@ -61,12 +61,30 @@ Create a `.env.local` file in the root directory and add your Pinata JWT for IPF
 ```env
 NEXT_PUBLIC_PINATA_JWT=your_pinata_jwt_token_here
 
-# Installation
+```
+
+### 3. Installation
+
 Clone the repository and install the dependencies:
 
+```bash
 git clone [https://github.com/yourusername/SmartTender.git](https://github.com/yourusername/SmartTender.git)
 cd SmartTender
 npm install
 
-Run the Development Server
+```
+
+### 4. Run the Development Server
+
+```bash
 npm run dev
+
+```
+
+Navigate to `http://localhost:3000` to view the application.
+
+```
+
+Would you like me to start drafting that presentation script for you next, or do you want to tackle linking your Hostinger landing page?
+
+```
