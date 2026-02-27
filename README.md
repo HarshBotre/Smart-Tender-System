@@ -1,55 +1,72 @@
-Goal: Set up the "Smart Tender" project on your laptop.
+# 🏛️ SmartTender: Web3 Government Procurement
 
-1. Install Prerequisites (Do this first)
-Before downloading the code, make sure you have these tools installed.
+SmartTender is a next-generation decentralized application (dApp) designed to eliminate corruption, ensure absolute transparency, and cryptographically secure financial bids in government and enterprise procurement. 
 
-Node.js (LTS Version): [Download Here](https://nodejs.org/)
+By leveraging Ethereum smart contracts, IPFS decentralized storage, and a cryptographically enforced **Two-Envelope Commit-Reveal** bidding scheme, SmartTender guarantees that technical evaluations are performed completely blind to financial influences.
 
-Git: [Download Here](https://git-scm.com/)
+---
 
-VS Code: [Download Here](https://code.visualstudio.com/)
+## ✨ Core Features
 
-MetaMask Extension: Add it to Chrome/Brave and create a wallet.
+### 🔒 Cryptographic Bid Secrecy (Commit-Reveal)
+Contractors submit a Keccak256 hash of their financial bid along with a secret salt. The actual bid amount remains mathematically hidden on the blockchain until the Admin whitelists their technical proposal, preventing competitors from underbidding.
 
-2. Get the Code
-Open your terminal (Command Prompt or PowerShell) and run these commands to download our project:
+### 📁 Decentralized Document Storage (IPFS)
+All official government notices and contractor architectural blueprints (PDFs) are uploaded directly to the InterPlanetary File System (IPFS) via Pinata, ensuring documents are immutable and tamper-proof.
 
-PowerShell
-# 1. Download the project repository
-git clone https://github.com/HarshBotre/Smart-Tender-System.git
+### ⏱️ Blockchain-Enforced Timers
+Procurement phases (Bidding Window, Reveal Window, and Award Phase) are strictly enforced by block timestamps. Bidders cannot submit late, and administrators are mathematically prohibited from evaluating documents or peeking at bids early.
 
-# 2. Go inside the folder
-cd Smart-Tender-System
+### 💰 Automated EMD Escrow
+Contractors must lock an Earnest Money Deposit (EMD) in the smart contract to participate. Once the contract is officially awarded, the winner's EMD is locked as a performance guarantee, while losing and disqualified bidders can safely withdraw their ETH.
 
-3. Install Dependencies (The Magic Step)
-IMPORTANT: Do NOT run npx hardhat init. Harsh has already set up the versions. You just need to download the libraries defined in package.json.
+---
 
-Run this command and wait for it to finish:
+## 🛠️ Tech Stack
 
-PowerShell
+* **Frontend:** Next.js, React, Tailwind CSS (Custom Enterprise Dark Theme)
+* **Web3 Integration:** Wagmi, Viem, RainbowKit
+* **Smart Contracts:** Solidity (Deployed on Sepolia Testnet)
+* **Decentralized Storage:** IPFS (via Pinata API)
+* **Icons:** Lucide-React
+
+---
+
+## 🏛️ The Two-Envelope Architecture
+
+The platform rigidly enforces the standard government Two-Envelope procurement method:
+
+1.  **Phase 1: Tender Creation (Admin)**
+    * The Administrator creates a tender, uploads the official requirement PDF to IPFS, and sets strict duration timers for Bidding and Revealing.
+2.  **Phase 2: Bidding / Commit Phase (Contractor)**
+    * Contractors upload their technical execution plan (PDF) to IPFS.
+    * They lock their secret financial bid and password (salt) using local browser storage and send the cryptographic hash to the blockchain along with their EMD in ETH.
+3.  **Phase 3: Technical Evaluation (Admin)**
+    * Once the Bidding phase ends, the Admin uses the **Evaluator's Dashboard** to directly look up contractor submissions.
+    * The Admin reviews the IPFS PDFs and explicitly whitelists technically qualified bidders on the blockchain. 
+4.  **Phase 4: Financial Reveal (Contractor)**
+    * Only whitelisted contractors are permitted to reveal their financial bids by submitting their exact unhashed amount and salt. The smart contract validates the hash perfectly.
+5.  **Phase 5: Award & Escrow Resolution (Admin)**
+    * The Admin officially awards the contract to the lowest mathematically verified bidder. Losers withdraw their EMDs.
+
+---
+
+## ⚙️ Getting Started (Local Development)
+
+### 1. Prerequisites
+Ensure you have **Node.js** installed and a Web3 wallet (like **MetaMask**) configured for the Sepolia Testnet.
+
+### 2. Environment Variables
+Create a `.env.local` file in the root directory and add your Pinata JWT for IPFS uploads:
+```env
+NEXT_PUBLIC_PINATA_JWT=your_pinata_jwt_token_here
+
+# Installation
+Clone the repository and install the dependencies:
+
+git clone [https://github.com/yourusername/SmartTender.git](https://github.com/yourusername/SmartTender.git)
+cd SmartTender
 npm install
 
-4. Set Up Your Secrets
-The file that holds private keys (.env) is hidden for security. You need to create your own local copy.
-
-# 1. Open the project in VS Code (code .).
-
-# 2. In the file explorer (left side), right-click in the empty space and select New File.
-
-# 3. Name it: .env
-
-# 4. Paste this inside the file:
-
-# We will fill these in later when we deploy to a real testnet
-SEPOLIA_RPC_URL="https://sepolia.infura.io/v3/YOUR-API-KEY"
-PRIVATE_KEY="0000000000000000000000000000000000000000000000000000"
-Save the file (Ctrl + S).
-
-5. Verify Everything Works
-To make sure your setup is perfect, try to compile the smart contract. Run this in your VS Code terminal:
-
-PowerShell
-npx hardhat compile
-If you see: Compiled 1 Solidity file successfully (or "Nothing to compile"), you are ready! ✅
-
-If you see an error: Post a screenshot in the group chat.
+Run the Development Server
+npm run dev
