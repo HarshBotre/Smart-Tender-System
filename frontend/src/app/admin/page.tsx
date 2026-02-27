@@ -1,10 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { useWriteContract, useAccount, usePublicClient } from 'wagmi';
+import { useWriteContract, useReadContract, useAccount } from 'wagmi';
 import { tenderABI } from '../../abi';
-import { parseEther, parseAbiItem } from 'viem';
-import { Search, FileText, CheckSquare } from 'lucide-react';
+import { parseEther } from 'viem';
+import { Search, FileText, CheckSquare, Award } from 'lucide-react';
 
 const ADMIN_WALLET = '0x54F99f09aC935AaFe19E4e9C8a9c65c7f28B93fA';
 const CONTRACT_ADDRESS = '0x0FeD7C2d66ceF37BA2a3a53f3de627eF4752F51d';
@@ -12,7 +12,6 @@ const getIPFSGatewayURL = (uri: string) => uri?.startsWith('ipfs://') ? uri.repl
 
 export default function AdminPage() {
   const { address } = useAccount();
-  const publicClient = usePublicClient(); // <-- NEW: Allows us to scan the blockchain
   
   // Create Tender State
   const [file, setFile] = useState<File | null>(null);
@@ -22,12 +21,28 @@ export default function AdminPage() {
   
   // Evaluator Dashboard State
   const [evalTenderId, setEvalTenderId] = useState('');
-  const [bidders, setBidders] = useState<{address: string, uri: string}[]>([]);
-  const [selectedBidders, setSelectedBidders] = useState<string[]>([]);
-  const [isFetching, setIsFetching] = useState(false);
+  const [bidderAddress, setBidderAddress] = useState('');
+
+  // NEW: Award Contract State
+  const [awardTenderId, setAwardTenderId] = useState('');
+
+  const isValidAddress = bidderAddress.startsWith('0x') && bidderAddress.length === 42;
 
   const { writeContract: writeCreate } = useWriteContract();
   const { writeContract: writeEval } = useWriteContract();
+  const { writeContract: writeAward } = useWriteContract(); // NEW HOOK
+
+  // Direct Blockchain Lookup
+  const { data: bidData, isLoading: isReadingBid } = useReadContract({
+    address: CONTRACT_ADDRESS, 
+    abi: tenderABI, 
+    functionName: 'bids',
+    args: evalTenderId && isValidAddress ? [BigInt(evalTenderId), bidderAddress as `0x${string}`] : undefined,
+    query: { enabled: !!evalTenderId && isValidAddress }
+  });
+
+  const technicalURI = bidData ? (bidData as any)[0] : '';
+  const isTechnicallyValid = bidData ? (bidData as any)[2] : false;
 
   // --- SECURITY GUARD ---
   if (!address || address.toLowerCase() !== ADMIN_WALLET.toLowerCase()) {
@@ -51,54 +66,27 @@ export default function AdminPage() {
     writeCreate({ address: CONTRACT_ADDRESS, abi: tenderABI, functionName: 'createTender', args: [`ipfs://${pinataData.IpfsHash}`, parseEther(emd), BigInt(Number(bidDuration) * 60), BigInt(Number(revealDuration) * 60)] });
   };
 
-  // NEW: Query the blockchain for all BidCommitted events for this tender
-  const handleFetchBidders = async () => {
-    if (!publicClient || !evalTenderId) return;
-    setIsFetching(true);
-    try {
-      const logs = await publicClient.getLogs({
-        address: CONTRACT_ADDRESS,
-        event: parseAbiItem('event BidCommitted(uint256 indexed tenderId, address indexed bidder, string technicalDocURI)'),
-        args: { tenderId: BigInt(evalTenderId) },
-        fromBlock: 'earliest',
-        toBlock: 'latest'
-      });
-
-      // Deduplicate in case a bidder submitted multiple times
-      const bidderMap = new Map<string, string>();
-      logs.forEach((log) => {
-        if (log.args.bidder && log.args.technicalDocURI) {
-           bidderMap.set(log.args.bidder, log.args.technicalDocURI);
-        }
-      });
-
-      setBidders(Array.from(bidderMap.entries()).map(([addr, uri]) => ({ address: addr, uri })));
-      setSelectedBidders([]); // Reset checkboxes
-    } catch (error) {
-      console.error("Failed to fetch logs:", error);
-      alert("Error querying blockchain. See console.");
-    }
-    setIsFetching(false);
-  };
-
-  const toggleBidder = (addr: string) => {
-    setSelectedBidders(prev => prev.includes(addr) ? prev.filter(a => a !== addr) : [...prev, addr]);
-  };
-
   const handleApprove = () => {
-    if (selectedBidders.length === 0) return;
-    writeEval({ address: CONTRACT_ADDRESS, abi: tenderABI, functionName: 'evaluateTechnical', args: [BigInt(evalTenderId), selectedBidders as `0x${string}`[]] });
+    if (!isValidAddress) return;
+    writeEval({ address: CONTRACT_ADDRESS, abi: tenderABI, functionName: 'evaluateTechnical', args: [BigInt(evalTenderId), [bidderAddress as `0x${string}`]] });
+  };
+
+  // NEW: Award Function
+  const handleAward = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!awardTenderId) return;
+    writeAward({ address: CONTRACT_ADDRESS, abi: tenderABI, functionName: 'awardContract', args: [BigInt(awardTenderId)] });
   };
 
   // --- UI RENDER ---
   return (
-    <div className="w-full max-w-6xl mx-auto animate-fade-in">
+    <div className="w-full max-w-6xl mx-auto animate-fade-in pb-20">
       <div className="mb-10 border-b border-[#73628A] pb-6">
         <h1 className="text-4xl font-extrabold mb-2 text-[#EAEAEA]">Administration Control</h1>
         <p className="text-[#CBC5EA] text-lg">Manage procurements and evaluate vendor submissions securely.</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
         
         {/* CARD 1: CREATE TENDER */}
         <div className="bg-[#313D5A] rounded-xl p-8 shadow-xl border border-[#73628A]">
@@ -130,51 +118,69 @@ export default function AdminPage() {
         <div className="bg-[#313D5A] rounded-xl p-8 shadow-xl border border-[#73628A] flex flex-col">
           <h2 className="text-xl font-bold text-[#EAEAEA] mb-6 border-b border-[#73628A] pb-3">2. Evaluator's Dashboard</h2>
           
-          <div className="bg-[#183642] p-5 rounded border border-[#73628A] mb-2">
-            <h3 className="text-sm font-bold text-[#EAEAEA] mb-3 flex items-center gap-2"><Search size={16}/> Scan Blockchain for Bids</h3>
-            <div className="flex gap-3">
-              <input type="number" value={evalTenderId} onChange={(e) => setEvalTenderId(e.target.value)} className="flex-1 p-2 rounded bg-[#313D5A] border border-[#73628A] text-white text-sm outline-none focus:border-[#CBC5EA]" placeholder="Enter Tender ID (e.g., 1)" />
-              <button onClick={handleFetchBidders} disabled={isFetching || !evalTenderId} className="bg-[#73628A] hover:bg-[#CBC5EA] hover:text-[#183642] text-[#EAEAEA] px-4 rounded text-sm font-bold transition-colors disabled:opacity-50">
-                {isFetching ? 'Scanning...' : 'Scan'}
-              </button>
+          <div className="bg-[#183642] p-5 rounded border border-[#73628A] mb-4">
+            <h3 className="text-sm font-bold text-[#EAEAEA] mb-3 flex items-center gap-2"><Search size={16}/> Direct Submission Lookup</h3>
+            <div className="flex flex-col gap-3">
+              <input type="number" value={evalTenderId} onChange={(e) => setEvalTenderId(e.target.value)} className="w-full p-3 rounded bg-[#313D5A] border border-[#73628A] text-white text-sm outline-none focus:border-[#CBC5EA]" placeholder="Enter Tender ID (e.g., 1)" />
+              <input type="text" value={bidderAddress} onChange={(e) => setBidderAddress(e.target.value)} className="w-full p-3 rounded bg-[#313D5A] border border-[#73628A] text-white text-sm outline-none focus:border-[#CBC5EA]" placeholder="Paste Contractor Wallet Address (0x...)" />
             </div>
           </div>
 
-          {/* DYNAMIC GALLERY OF SUBMITTED PDFS */}
-          {bidders.length > 0 && (
-            <div className="mt-4 flex-1 flex flex-col animate-fade-in">
-              <div className="flex justify-between items-end mb-3">
-                <h3 className="text-sm font-bold text-[#CBC5EA]">Submitted Technical Plans</h3>
-                <span className="text-xs text-[#CBC5EA]">{selectedBidders.length} / {bidders.length} Selected</span>
+          <div className="mt-2 flex-1 flex flex-col animate-fade-in">
+            {isReadingBid ? (
+              <p className="text-[#CBC5EA] text-sm text-center mt-4">Querying Blockchain...</p>
+            ) : technicalURI ? (
+              <div className="bg-[#183642] border border-[#73628A] p-4 rounded-lg flex flex-col gap-4">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <span className="text-sm font-bold text-[#EAEAEA] block">Technical Document Found</span>
+                    {isTechnicallyValid ? (
+                      <span className="text-xs text-green-400 font-bold flex items-center gap-1 mt-1"><CheckSquare size={14}/> Whitelisted</span>
+                    ) : (
+                      <span className="text-xs text-yellow-400 font-bold mt-1 block">Pending Evaluation</span>
+                    )}
+                  </div>
+                  <a href={getIPFSGatewayURL(technicalURI)} target="_blank" rel="noopener noreferrer" className="bg-[#313D5A] hover:bg-[#73628A] text-[#CBC5EA] hover:text-[#EAEAEA] text-xs px-4 py-2 rounded font-bold transition-all flex items-center gap-2">
+                    <FileText size={14} /> View PDF
+                  </a>
+                </div>
+                
+                {!isTechnicallyValid && (
+                  <button onClick={handleApprove} className="w-full bg-[#73628A] hover:bg-[#CBC5EA] hover:text-[#183642] text-[#EAEAEA] font-bold py-3 rounded transition-colors">
+                    Approve & Whitelist Bidder
+                  </button>
+                )}
               </div>
-              
-              <div className="flex flex-col gap-3 mb-6 max-h-56 overflow-y-auto pr-2 custom-scrollbar">
-                {bidders.map((b) => (
-                  <label key={b.address} className={`flex items-center justify-between p-3 rounded border cursor-pointer transition-colors ${selectedBidders.includes(b.address) ? 'bg-[#73628A]/20 border-[#CBC5EA]' : 'bg-[#183642] border-[#73628A] hover:border-[#CBC5EA]'}`}>
-                    <div className="flex items-center gap-3">
-                      <input type="checkbox" checked={selectedBidders.includes(b.address)} onChange={() => toggleBidder(b.address)} className="w-5 h-5 accent-[#73628A] cursor-pointer" />
-                      <span className="text-sm text-[#EAEAEA] font-mono">{b.address.slice(0, 6)}...{b.address.slice(-4)}</span>
-                    </div>
-                    <a href={getIPFSGatewayURL(b.uri)} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="bg-[#313D5A] hover:bg-[#73628A] text-[#CBC5EA] hover:text-[#EAEAEA] text-xs px-3 py-1.5 rounded transition-colors flex items-center gap-1">
-                      <FileText size={14} /> View PDF
-                    </a>
-                  </label>
-                ))}
-              </div>
-
-              <button onClick={handleApprove} disabled={selectedBidders.length === 0} className="mt-auto w-full bg-[#73628A] hover:bg-[#CBC5EA] hover:text-[#183642] text-[#EAEAEA] font-bold py-3 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                Approve {selectedBidders.length} Selected Bidders
-              </button>
-            </div>
-          )}
-
-          {/* Empty State */}
-          {!isFetching && evalTenderId && bidders.length === 0 && (
-             <p className="text-[#CBC5EA] text-sm text-center mt-6">No bids found for this Tender ID.</p>
-          )}
-
+            ) : (evalTenderId && isValidAddress) ? (
+              <p className="text-red-400 text-sm text-center mt-4">No submission found for this address.</p>
+            ) : null}
+          </div>
         </div>
       </div>
+
+      {/* CARD 3: AWARD CONTRACT */}
+      <div className="bg-[#313D5A] rounded-xl p-8 shadow-xl border border-[#73628A] w-full">
+        <h2 className="text-xl font-bold text-[#EAEAEA] mb-4 border-b border-[#73628A] pb-3 flex items-center gap-2">
+          <Award size={24} className="text-yellow-400" /> 
+          3. Finalize & Award Contract
+        </h2>
+        <p className="text-[#CBC5EA] mb-6">Officially close the tender and lock the winning contractor's EMD. You can only execute this action after the <span className="text-yellow-400 font-bold">Reveal Phase</span> has completely expired.</p>
+        
+        <form onSubmit={handleAward} className="flex flex-col sm:flex-row gap-4">
+          <input 
+            type="number" 
+            value={awardTenderId} 
+            onChange={(e) => setAwardTenderId(e.target.value)} 
+            className="flex-1 p-3 rounded bg-[#183642] border border-[#73628A] text-white text-lg outline-none focus:border-[#CBC5EA]" 
+            placeholder="Enter Tender ID to Award (e.g., 6)" 
+            required 
+          />
+          <button type="submit" className="bg-green-700 hover:bg-green-600 text-white font-bold py-3 px-8 rounded transition-colors whitespace-nowrap">
+            Officially Award Contract
+          </button>
+        </form>
+      </div>
+
     </div>
   );
 }
